@@ -58,13 +58,17 @@ impl TryFrom<&str> for HttpRequest {
 
 const OK_STRING: &str = "200 OK";
 const NOTFOUND_STRING: &str = "404 Not Found";
+const BADREQUEST_STRING: &str = "400 Bad Request";
+const NOTIMPLEMENTED_STRING: &str = "501 Not Implemented";
 const CONTENTTYPE_STRING: &str = "Content-Type";
 const CONTENTTYPE_TEXTPLAIN_STRING: &str = "text/plain";
 const CONTENTLEN_STRING: &str = "Content-Length";
 
 enum HttpResponseStatus {
-    Ok,
-    NotFound,
+    Ok,             // 200
+    NotFound,       // 404
+    BadRequest,     // 400
+    NotImplemented, // 501
 }
 
 impl fmt::Display for HttpResponseStatus {
@@ -72,6 +76,8 @@ impl fmt::Display for HttpResponseStatus {
         match *self {
             Self::Ok => write!(f, "{}", OK_STRING),
             Self::NotFound => write!(f, "{}", NOTFOUND_STRING),
+            Self::BadRequest => write!(f, "{}", BADREQUEST_STRING),
+            Self::NotImplemented => write!(f, "{}", NOTIMPLEMENTED_STRING),
         }
     }
 }
@@ -127,7 +133,7 @@ fn handle_request(request: &str) -> String {
     let response: HttpResponse = match HttpRequest::try_from(request) {
         Ok(http) => {
             if http.method != HttpMethod::GET {
-                HttpResponse::new(HttpResponseStatus::NotFound)
+                HttpResponse::new(HttpResponseStatus::NotImplemented)
             } else {
                 if http.path == "/" {
                     HttpResponse::new(HttpResponseStatus::Ok)
@@ -138,7 +144,7 @@ fn handle_request(request: &str) -> String {
                 }
             }
         }
-        Err(_) => HttpResponse::new(HttpResponseStatus::NotFound),
+        Err(_) => HttpResponse::new(HttpResponseStatus::BadRequest),
     };
 
     response.into()
