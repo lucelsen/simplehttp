@@ -58,6 +58,9 @@ impl TryFrom<&str> for HttpRequest {
 
 const OK_STRING: &str = "200 OK";
 const NOTFOUND_STRING: &str = "404 Not Found";
+const CONTENTTYPE_STRING: &str = "Content-Type";
+const CONTENTTYPE_TEXTPLAIN_STRING: &str = "text/plain";
+const CONTENTLEN_STRING: &str = "Content-Length";
 
 enum HttpResponseStatus {
     Ok,
@@ -73,29 +76,66 @@ impl fmt::Display for HttpResponseStatus {
     }
 }
 
+enum HttpResponseContent {
+    Empty,
+    TextPlain(String),
+}
+
 struct HttpResponse {
     pub status: HttpResponseStatus,
+    pub content: HttpResponseContent,
 }
 
 impl Into<String> for HttpResponse {
     fn into(self) -> String {
-        format!("HTTP/1.1 {}\r\n\r\n", self.status.to_string())
+        let mut result = format!("HTTP/1.1 {}\r\n", self.status);
+
+        result = match self.content {
+            HttpResponseContent::Empty => result,
+            HttpResponseContent::TextPlain(c) => {
+                format!(
+                    "{}{}: {}\r\n{}: {}\r\n\r\n{}",
+                    result,
+                    CONTENTLEN_STRING,
+                    c.len(),
+                    CONTENTTYPE_STRING,
+                    CONTENTTYPE_TEXTPLAIN_STRING,
+                    c
+                )
+            }
+        };
+
+        format!("{}\r\n", result)
     }
 }
 
 impl HttpResponse {
     fn new(status: HttpResponseStatus) -> Self {
-        HttpResponse { status }
+        HttpResponse {
+            status,
+            content: HttpResponseContent::Empty,
+        }
+    }
+
+    fn with_content_text_plain(mut self, content: &str) -> Self {
+        self.content = HttpResponseContent::TextPlain(content.to_string());
+        self
     }
 }
 
 fn handle_request(request: &str) -> String {
     let response: HttpResponse = match HttpRequest::try_from(request) {
         Ok(http) => {
-            if http.path == "/" && http.method == HttpMethod::GET {
-                HttpResponse::new(HttpResponseStatus::Ok)
-            } else {
+            if http.method != HttpMethod::GET {
                 HttpResponse::new(HttpResponseStatus::NotFound)
+            } else {
+                if http.path == "/" {
+                    HttpResponse::new(HttpResponseStatus::Ok)
+                } else if let Some(to_echo) = http.path.strip_prefix("/echo/") {
+                    HttpResponse::new(HttpResponseStatus::Ok).with_content_text_plain(to_echo)
+                } else {
+                    HttpResponse::new(HttpResponseStatus::NotFound)
+                }
             }
         }
         Err(_) => HttpResponse::new(HttpResponseStatus::NotFound),
