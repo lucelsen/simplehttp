@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::str::FromStr;
@@ -55,20 +56,52 @@ impl TryFrom<&str> for HttpRequest {
     }
 }
 
-const SUCESS_STRING: &str = "HTTP/1.1 200 OK\r\n\r\n";
-const FAILURE_STRING: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
+const OK_STRING: &str = "200 OK";
+const NOTFOUND_STRING: &str = "404 Not Found";
 
-fn handle_request(request: &str) -> &str {
-    match HttpRequest::try_from(request) {
+enum HttpResponseStatus {
+    Ok,
+    NotFound,
+}
+
+impl fmt::Display for HttpResponseStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Ok => write!(f, "{}", OK_STRING),
+            Self::NotFound => write!(f, "{}", NOTFOUND_STRING),
+        }
+    }
+}
+
+struct HttpResponse {
+    pub status: HttpResponseStatus,
+}
+
+impl Into<String> for HttpResponse {
+    fn into(self) -> String {
+        format!("HTTP/1.1 {}\r\n\r\n", self.status.to_string())
+    }
+}
+
+impl HttpResponse {
+    fn new(status: HttpResponseStatus) -> Self {
+        HttpResponse { status }
+    }
+}
+
+fn handle_request(request: &str) -> String {
+    let response: HttpResponse = match HttpRequest::try_from(request) {
         Ok(http) => {
             if http.path == "/" && http.method == HttpMethod::GET {
-                SUCESS_STRING
+                HttpResponse::new(HttpResponseStatus::Ok)
             } else {
-                FAILURE_STRING
+                HttpResponse::new(HttpResponseStatus::NotFound)
             }
         }
-        Err(_) => FAILURE_STRING,
-    }
+        Err(_) => HttpResponse::new(HttpResponseStatus::NotFound),
+    };
+
+    response.into()
 }
 
 fn main() -> std::io::Result<()> {
