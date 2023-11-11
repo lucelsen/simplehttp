@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -22,6 +23,7 @@ impl FromStr for HttpMethod {
 struct HttpRequest {
     pub method: HttpMethod,
     pub path: String,
+    pub headers: HashMap<String, String>,
 }
 
 impl TryFrom<&str> for HttpRequest {
@@ -30,8 +32,11 @@ impl TryFrom<&str> for HttpRequest {
     fn try_from(request: &str) -> Result<Self, Self::Error> {
         let method;
         let path;
+        let mut headers = HashMap::new();
 
-        match request.lines().next() {
+        let mut lines = request.lines();
+
+        match lines.next() {
             None => return Err(()),
             Some(first_line) => {
                 let mut chunks = first_line.split_whitespace();
@@ -50,9 +55,23 @@ impl TryFrom<&str> for HttpRequest {
             }
         };
 
-        // NOTE: More Lines could contain HTTP headers or contents
+        while let Some(line) = lines.next() {
+            if line.len() == 0 {
+                break;
+            }
 
-        Ok(HttpRequest { method, path })
+            let (key, value) = line.split_once(':').ok_or(())?;
+
+            headers.insert(key.trim().to_string(), value.trim().to_string());
+        }
+
+        // NOTE: More Lines could contain content
+
+        Ok(HttpRequest {
+            method,
+            path,
+            headers,
+        })
     }
 }
 
@@ -139,6 +158,13 @@ fn handle_request(request: &str) -> String {
                     HttpResponse::new(HttpResponseStatus::Ok)
                 } else if let Some(to_echo) = http.path.strip_prefix("/echo/") {
                     HttpResponse::new(HttpResponseStatus::Ok).with_content_text_plain(to_echo)
+                } else if http.path == "/user-agent" {
+                    match http.headers.get("User-Agent") {
+                        None => HttpResponse::new(HttpResponseStatus::BadRequest),
+                        Some(value) => {
+                            HttpResponse::new(HttpResponseStatus::Ok).with_content_text_plain(value)
+                        }
+                    }
                 } else {
                     HttpResponse::new(HttpResponseStatus::NotFound)
                 }
